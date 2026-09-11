@@ -15,7 +15,7 @@ jobs:
     if: github.event.pull_request.draft == false
     runs-on: ubuntu-latest
     steps:
-      - name: Request the AI review
+      - name: Request review
         env:
           GH_TOKEN: ${{ github.token }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
@@ -23,7 +23,7 @@ jobs:
         run: |
           gh api --method POST \
             "repos/${GITHUB_REPOSITORY}/pulls/${PR_NUMBER}/requested_reviewers" \
-            -f "reviewers[]=sjungwon03-ai"
+            -f "reviewers[]=sjungwon03"
           gh api --method POST \
             "repos/${GITHUB_REPOSITORY}/issues/${PR_NUMBER}/assignees" \
             -f "assignees[]=${PR_AUTHOR}"
