@@ -13,7 +13,7 @@ jobs:
   enable-automerge:
     if: >-
       github.event.review.state == 'approved' &&
-      github.event.review.user.login == 'sjungwon03' &&
+      github.event.review.user.login == 'sjungwon03-ai' &&
       github.event.review.commit_id == github.event.pull_request.head.sha &&
       github.event.pull_request.draft == false &&
       (github.event.pull_request.base.ref == 'dev' || github.event.pull_request.base.ref == 'main')
