@@ -23,7 +23,7 @@ jobs:
         run: |
           gh api --method POST \
             "repos/${GITHUB_REPOSITORY}/pulls/${PR_NUMBER}/requested_reviewers" \
-            -f "reviewers[]=sjungwon03"
+            -f "reviewers[]=sjungwon03-ai"
           gh api --method POST \
             "repos/${GITHUB_REPOSITORY}/issues/${PR_NUMBER}/assignees" \
             -f "assignees[]=${PR_AUTHOR}"
