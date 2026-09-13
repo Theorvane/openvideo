@@ -34,6 +34,8 @@ describe("AI pull request automation", () => {
     expect(workflow).toContain('as $pr')
     expect(workflow).toContain('.commit.oid == $pr.headRefOid')
     expect(workflow).toContain('.baseRefName == "dev" or .baseRefName == "main"')
+    expect(workflow).toContain('query="query { repository(owner:')
+    expect(workflow).not.toContain("query='query { repository")
     expect(workflow).toContain("labels[]=ai-approved")
     expect(workflow).toContain("labels/ai-review-requested")
     expect(workflow).toContain('gh pr view "$number" --repo "$GITHUB_REPOSITORY"')

@@ -21,14 +21,14 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          query='query { repository(owner: "'"${GITHUB_REPOSITORY%/*}"'", name: "'"${GITHUB_REPOSITORY#*/}"'") { pullRequests(first: 100, states: OPEN) { nodes { number isDraft baseRefName headRefOid reviews(last: 100) { nodes { state author { login } commit { oid } } } } } } }'
+          query="query { repository(owner: \"${GITHUB_REPOSITORY%/*}\", name: \"${GITHUB_REPOSITORY#*/}\") { pullRequests(first: 100, states: OPEN) { nodes { number isDraft baseRefName headRefOid reviews(last: 100) { nodes { state author { login } commit { oid } } } } } } }"
           gh api graphql -f query="$query" > pull-requests.json
           jq -r '
             .data.repository.pullRequests.nodes[]
             | . as $pr
             | select(.isDraft | not)
             | select(.baseRefName == "dev" or .baseRefName == "main")
-            | select(any(.reviews.nodes[]; .state == "APPROVED" and .author.login == "sjungwon03-ai" and .commit.oid == $pr.headRefOid) )
+            | select(any(.reviews.nodes[]; .state == "APPROVED" and .author.login == "sjungwon03-ai" and .commit.oid == $pr.headRefOid))
             | .number
           ' pull-requests.json | while read -r number; do
             gh api --method POST "repos/${GITHUB_REPOSITORY}/issues/${number}/labels" -f 'labels[]=ai-approved'
