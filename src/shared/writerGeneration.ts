@@ -137,8 +137,7 @@ export async function requestGeminiWriter(input: GeminiWriterInput): Promise<Wri
     }
     const parts = candidate?.content?.parts ?? [];
     const visibleText = parts.filter((part) => part.thought !== true).map((part) => part.text ?? '').join('');
-    const allText = parts.map((part) => part.text ?? '').join('');
-    const json = extractWriterJson(visibleText || allText);
+    const json = extractWriterJson(visibleText);
     if (json === null) throw new Error('Gemini Writer returned invalid JSON. The response did not contain a complete JSON object.');
     let decoded: unknown;
     try {
