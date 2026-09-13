@@ -25,9 +25,10 @@ jobs:
           gh api graphql -f query="$query" > pull-requests.json
           jq -r '
             .data.repository.pullRequests.nodes[]
+            | . as $pr
             | select(.isDraft | not)
             | select(.baseRefName == "dev" or .baseRefName == "main")
-            | select(any(.reviews.nodes[]; .state == "APPROVED" and .author.login == "sjungwon03-ai" and .commit.oid == .headRefOid))
+            | select(any(.reviews.nodes[]; .state == "APPROVED" and .author.login == "sjungwon03-ai" and .commit.oid == $pr.headRefOid) )
             | .number
           ' pull-requests.json | while read -r number; do
             gh api --method POST "repos/${GITHUB_REPOSITORY}/issues/${number}/labels" -f 'labels[]=ai-approved'

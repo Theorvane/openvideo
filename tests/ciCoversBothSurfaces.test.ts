@@ -195,7 +195,8 @@ describe('the AI approval auto-merge workflow', () => {
   it('merges only current-head approvals from the dedicated reviewer without checking out PR code', async () => {
     const yaml = await read();
     expect(yaml).toContain('.author.login == "sjungwon03-ai"');
-    expect(yaml).toContain('.commit.oid == .headRefOid');
+    expect(yaml).toContain('as $pr');
+    expect(yaml).toContain('.commit.oid == $pr.headRefOid');
     expect(yaml).toContain('.baseRefName == "dev" or .baseRefName == "main"');
     expect(yaml).toContain('gh pr merge "$number" --repo "$GITHUB_REPOSITORY" --auto --squash --delete-branch');
     expect(yaml).not.toContain('actions/checkout');
