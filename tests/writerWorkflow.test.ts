@@ -3,12 +3,14 @@ import { describe, expect, it } from 'vitest';
 import { createEmptyAiProjectDocument, parseAiProjectDocument } from '../src/shared/aiProjectDomain';
 import {
   WRITER_RESPONSE_JSON_SCHEMA,
+  WRITER_VIDEO_STYLE_LABELS,
   applyWriterDraft,
   compileWriterPrompt,
   parseWriterDraft,
   parseWriterGenerationInput,
   parseWriterRequest,
   validateWriterDraft,
+  writerDraftDurationMatchesTarget,
   writerDraftDurationSeconds,
   type WriterDraft,
   type WriterRequest
@@ -72,6 +74,20 @@ describe('Writer workflow', () => {
     expect(shotSchema.items.properties.durationSeconds).toMatchObject({ type: 'integer', minimum: 1, maximum: 120 });
   });
 
+  it('supports the Traditional 2D Cel Animation preset and bounded custom style direction', () => {
+    const styled = {
+      ...request,
+      videoStyle: 'traditional-2d-cel-animation' as const,
+      customVideoStyle: 'Hand-drawn ink contours, painted cel fills, and visible frame-by-frame timing.'
+    };
+    expect(WRITER_VIDEO_STYLE_LABELS[styled.videoStyle]).toBe('Traditional 2D Cel Animation');
+    expect(parseWriterRequest(styled)).toEqual(styled);
+    const prompt = compileWriterPrompt(styled);
+    expect(prompt).toContain('TRADITIONAL 2D CEL ANIMATION');
+    expect(prompt).toContain(styled.customVideoStyle);
+    expect(parseWriterRequest({ ...styled, customVideoStyle: 'x'.repeat(1_001) })).toBeNull();
+  });
+
   it('rejects partial drafts, duplicate characters, and unknown scene characters', () => {
     expect(parseWriterDraft(draft)).toEqual(draft);
     expect(parseWriterDraft({ ...draft, screenplay: '' })).toBeNull();
@@ -112,6 +128,8 @@ describe('Writer workflow', () => {
     expect(result.document.scenes[0]?.characterIds).toEqual(['writer-first-character-1']);
     expect(parseAiProjectDocument(result.document)).toEqual(result.document);
     expect(writerDraftDurationSeconds(draft)).toBe(12);
+    expect(writerDraftDurationMatchesTarget(draft, 22)).toBe(true);
+    expect(writerDraftDurationMatchesTarget(draft, 23)).toBe(false);
   });
 
   it('creates a child revision and supersedes its parent only in the applied document', () => {

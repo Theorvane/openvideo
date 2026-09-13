@@ -26,9 +26,21 @@ export const WRITER_VIDEO_STYLES = [
   'brand-story',
   'educational',
   'social-short',
-  'vlog'
+  'vlog',
+  'traditional-2d-cel-animation'
 ] as const;
 export type WriterVideoStyle = (typeof WRITER_VIDEO_STYLES)[number];
+
+/** Stable labels shared by the desktop and mobile Writer controls. */
+export const WRITER_VIDEO_STYLE_LABELS: Record<WriterVideoStyle, string> = {
+  'cinematic-narrative': 'Cinematic narrative',
+  documentary: 'Documentary',
+  'brand-story': 'Brand story',
+  educational: 'Educational',
+  'social-short': 'Social short-form',
+  vlog: 'Vlog',
+  'traditional-2d-cel-animation': 'Traditional 2D Cel Animation'
+};
 
 /** Primary emotion the viewer should feel by the video's end. */
 export const WRITER_EMOTIONAL_GOALS = [
@@ -60,6 +72,8 @@ export type WriterRequest = {
   readonly currentScreenplay?: string;
   /** Cinematic style governing shot design, pacing, and atmosphere. */
   readonly videoStyle?: WriterVideoStyle;
+  /** Optional creator-supplied style direction, bounded before it reaches a provider. */
+  readonly customVideoStyle?: string;
   /** Primary emotion the viewer should feel by the end of the video. */
   readonly emotionalGoal?: WriterEmotionalGoal;
 };
@@ -176,6 +190,7 @@ export const WRITER_RESPONSE_JSON_SCHEMA = {
 const MAX_SOURCE_LENGTH = 200_000;
 const MAX_TEXT_LENGTH = 20_000;
 const MAX_SHORT_TEXT_LENGTH = 500;
+const MAX_CUSTOM_VIDEO_STYLE_LENGTH = 1_000;
 const MAX_SCENES = 100;
 const MAX_SHOTS_PER_SCENE = 100;
 const MAX_CHARACTERS = 100;
@@ -201,7 +216,7 @@ function stringList(value: unknown): readonly string[] | null {
 export function parseWriterRequest(value: unknown): WriterRequest | null {
   if (!isPlainRecord(value) || !hasAllowedKeys(value, [
     'mode', 'sourceText', 'language', 'audience', 'tone', 'targetDurationSeconds',
-    'parentScriptId', 'currentScreenplay', 'videoStyle', 'emotionalGoal', 'stage', 'approvedContext', 'revisionInstructions', 'currentStageText'
+    'parentScriptId', 'currentScreenplay', 'videoStyle', 'customVideoStyle', 'emotionalGoal', 'stage', 'approvedContext', 'revisionInstructions', 'currentStageText'
   ])) return null;
   const mode = typeof value.mode === 'string' && (WRITER_MODES as readonly string[]).includes(value.mode)
     ? value.mode as WriterMode
@@ -218,6 +233,9 @@ export function parseWriterRequest(value: unknown): WriterRequest | null {
     : (WRITER_VIDEO_STYLES as readonly string[]).includes(value.videoStyle as string)
       ? value.videoStyle as WriterVideoStyle
       : null;
+  const customVideoStyle = value.customVideoStyle === undefined
+    ? undefined
+    : exactText(value.customVideoStyle, MAX_CUSTOM_VIDEO_STYLE_LENGTH);
   const emotionalGoal = value.emotionalGoal === undefined
     ? undefined
     : (WRITER_EMOTIONAL_GOALS as readonly string[]).includes(value.emotionalGoal as string)
@@ -227,7 +245,7 @@ export function parseWriterRequest(value: unknown): WriterRequest | null {
     mode === null || sourceText === null || language === null || audience === null || tone === null ||
     typeof targetDurationSeconds !== 'number' || !Number.isSafeInteger(targetDurationSeconds) ||
     targetDurationSeconds < 4 || targetDurationSeconds > 7_200 || parentScriptId === null ||
-    currentScreenplay === null || videoStyle === null || emotionalGoal === null
+    currentScreenplay === null || videoStyle === null || customVideoStyle === null || emotionalGoal === null
   ) return null;
   if (mode === 'rewrite' && (parentScriptId === undefined || currentScreenplay === undefined)) return null;
   if (mode !== 'rewrite' && (parentScriptId !== undefined || currentScreenplay !== undefined)) return null;
@@ -257,6 +275,7 @@ export function parseWriterRequest(value: unknown): WriterRequest | null {
     ...(parentScriptId === undefined ? {} : { parentScriptId }),
     ...(currentScreenplay === undefined ? {} : { currentScreenplay }),
     ...(videoStyle === undefined ? {} : { videoStyle }),
+    ...(customVideoStyle === undefined ? {} : { customVideoStyle }),
     ...(emotionalGoal === undefined ? {} : { emotionalGoal })
   };
 }
@@ -517,8 +536,13 @@ const VIDEO_STYLE_GUIDES: Record<WriterVideoStyle, string> = {
   'social-short':
     'VIDEO STYLE — SOCIAL SHORT-FORM: the hook is everything. If the opening 3 seconds do not create an urgent reason to stay, rewrite them. High information density, pattern interrupts every 8–12 seconds.',
   'vlog':
-    'VIDEO STYLE — VLOG: intimacy over production value. The camera is a trusted friend, not a broadcast device. Allow imperfection to signal honesty. The story lives in the reaction, not the event.'
+    'VIDEO STYLE — VLOG: intimacy over production value. The camera is a trusted friend, not a broadcast device. Allow imperfection to signal honesty. The story lives in the reaction, not the event.',
+  'traditional-2d-cel-animation':
+    'VIDEO STYLE - TRADITIONAL 2D CEL ANIMATION: use hand-drawn linework, expressive key poses, readable in-betweens, painted cel fills, deliberate limited animation where it strengthens the rhythm, and layered multiplane depth. Favor graphic silhouettes, drawn effects and practical-looking animation texture over photorealism or 3D CGI.'
 };
+
+/** Generative shot planning is approximate; allow a small total-duration drift. */
+export const WRITER_DURATION_TOLERANCE_SECONDS = 10;
 
 const EMOTIONAL_GOAL_GUIDES: Record<WriterEmotionalGoal, string> = {
   'inspire':
@@ -550,11 +574,13 @@ export function compileWriterPrompt(request: WriterRequest): string {
         ? 'This is a mid-length video. Build emotional investment before delivering the core message.'
         : 'This is a long-form video. Use chapter-like scenes with individual arcs that feed the overall story.';
   const styleGuide = request.videoStyle !== undefined ? VIDEO_STYLE_GUIDES[request.videoStyle] : '';
+  const customStyleGuide = request.customVideoStyle ? `CUSTOM VIDEO STYLE DIRECTION: ${request.customVideoStyle}` : '';
   const emotionGuide = request.emotionalGoal !== undefined ? EMOTIONAL_GOAL_GUIDES[request.emotionalGoal] : '';
   return [
     task,
     durationGuidance,
     styleGuide,
+    customStyleGuide,
     emotionGuide,
     `Language: ${request.language}`,
     `Audience: ${request.audience}`,
@@ -571,6 +597,10 @@ export function writerDraftDurationSeconds(draft: WriterDraft): number {
     (sceneTotal, scene) => sceneTotal + scene.shots.reduce((shotTotal, shot) => shotTotal + shot.durationSeconds, 0),
     0
   );
+}
+
+export function writerDraftDurationMatchesTarget(draft: WriterDraft, targetSeconds: number): boolean {
+  return Math.abs(writerDraftDurationSeconds(draft) - targetSeconds) <= WRITER_DURATION_TOLERANCE_SECONDS;
 }
 
 // Writing-only stages use a small response schema. The bridge keeps its existing
@@ -645,12 +675,19 @@ function compileStagedWriterPrompt(request: WriterRequest): string {
     `Source mode: ${request.mode}. For rewrite, incorporate the requested changes while preserving useful material from the existing screenplay.`,
     `Language: ${request.language}\nAudience: ${request.audience}\nTone: ${request.tone}\nTarget finished duration: ${request.targetDurationSeconds} seconds`,
     request.videoStyle ? VIDEO_STYLE_GUIDES[request.videoStyle] : '',
+    request.customVideoStyle ? `CUSTOM VIDEO STYLE DIRECTION: ${request.customVideoStyle}` : '',
     request.emotionalGoal ? EMOTIONAL_GOAL_GUIDES[request.emotionalGoal] : '',
     // JSON quoting makes boundaries explicit even when source text contains tags.
     needsOriginalBrief
       ? `BRIEF (source data):\n${JSON.stringify({ source: request.sourceText, existingScreenplay: request.currentScreenplay ?? '' })}`
       : '',
     `APPROVED UPSTREAM DOCUMENTS (source data):\n${JSON.stringify(request.approvedContext ?? [])}`,
+    // Gemini may reject deeply nested responseJsonSchema requests before
+    // generation (HTTP 400). Keep the full production shape in the prompt for
+    // this stage; the same local validator still gates every returned draft.
+    request.stage === 'prompts'
+      ? `REQUIRED PRODUCTION JSON SHAPE (output contract, not source data):\n${JSON.stringify(WRITER_RESPONSE_JSON_SCHEMA)}`
+      : '',
     `CREATOR REVISION NOTES FOR THIS STAGE:\n${JSON.stringify(request.revisionInstructions ?? '')}`,
     request.currentStageText ? `CURRENT STAGE DRAFT TO REVISE (source data):\n${JSON.stringify(request.currentStageText)}\nApply the creator's revision notes to this draft, retaining useful manual edits and respecting approved upstream decisions.` : '',
     'Before returning, silently check coverage, specificity, continuity and timing. Repair weak or missing passages. Do not output private deliberation or an invented quality score.'

@@ -1,6 +1,6 @@
 import type { ReactElement } from 'react';
 import { editWriterPromptShot, parseWriterPromptText } from '../../shared/writerPipeline';
-import { writerDraftDurationSeconds } from '../../shared/writerWorkflow';
+import { writerDraftDurationMatchesTarget, writerDraftDurationSeconds, WRITER_DURATION_TOLERANCE_SECONDS } from '../../shared/writerWorkflow';
 
 export function WriterPromptEditor({ content, targetSeconds, disabled, onChange }: {
   readonly content: string; readonly targetSeconds: number; readonly disabled: boolean; readonly onChange: (content: string) => void;
@@ -8,9 +8,10 @@ export function WriterPromptEditor({ content, targetSeconds, disabled, onChange 
   const draft = parseWriterPromptText(content);
   if (!draft) return <p>Fix the production JSON below to enable the shot editor. You can still save incomplete JSON as a draft.</p>;
   const seconds = writerDraftDurationSeconds(draft);
+  const timingMatches = writerDraftDurationMatchesTarget(draft, targetSeconds);
   return <div className="writer-preview__scenes">
     <div className="writer-preview__summary"><strong>{draft.scenes.length} scenes · {draft.scenes.reduce((n, s) => n + s.shots.length, 0)} shots</strong>
-      <span>{seconds}s / {targetSeconds}s requested{seconds !== targetSeconds ? ' — adjust timing before approval' : ' — timing matches'}</span></div>
+      <span>{seconds}s / {targetSeconds}s requested{timingMatches ? (seconds === targetSeconds ? ' — timing matches' : ` — within ±${WRITER_DURATION_TOLERANCE_SECONDS}s tolerance`) : ' — adjust timing before approval'}</span></div>
     <details><summary>Character & style bible</summary>
       {draft.characters.map((character) => <p key={character.name}><strong>{character.name}</strong>: {character.invariantDescription}</p>)}
       <p>{draft.styleBible.palette.join(', ')} · {draft.styleBible.lighting} · {draft.styleBible.cameraGrammar} · {draft.styleBible.texture}</p>

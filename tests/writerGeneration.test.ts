@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 
-import { requestAgentRouterWriter, requestGeminiWriter } from '../src/shared/writerGeneration';
-import type { WriterDraft, WriterRequest } from '../src/shared/writerWorkflow';
+import { extractWriterJson, requestAgentRouterWriter, requestGeminiWriter } from '../src/shared/writerGeneration';
+import { WRITER_RESPONSE_JSON_SCHEMA, type WriterDraft, type WriterRequest } from '../src/shared/writerWorkflow';
 
 const request: WriterRequest = {
   mode: 'content_to_script', sourceText: 'A short product brief.', language: 'Vietnamese',
@@ -17,6 +17,91 @@ const draft: WriterDraft = {
 };
 
 describe('Gemini Writer generation', () => {
+  const promptsRequest: WriterRequest = {
+    ...request,
+    stage: 'prompts',
+    approvedContext: [
+      { stage: 'concept', content: 'Approved concept' },
+      { stage: 'screenplay', content: 'Approved screenplay' },
+      { stage: 'breakdown', content: 'Approved scene budgets' }
+    ]
+  };
+
+  it('extracts a complete object from a JSON fence or short model preamble', () => {
+    expect(extractWriterJson('Here is the requested JSON:\n```json\n{"title":"ok"}\n```\n')).toBe('{"title":"ok"}');
+    expect(extractWriterJson('{"title":"brace } in string"} trailing text')).toBe('{"title":"brace } in string"}');
+    expect(extractWriterJson('{"title":"unfinished"')).toBeNull();
+  });
+
+  it('ignores thought parts when a visible JSON part is present', async () => {
+    const fetchImpl = vi.fn(async () => new Response(JSON.stringify({ candidates: [{
+      content: { parts: [{ text: 'internal thought', thought: true }, { text: JSON.stringify(draft) }] },
+      finishReason: 'STOP'
+    }] }), { status: 200 }));
+
+    await expect(requestGeminiWriter({
+      apiKey: 'test-key', modelId: 'gemini-3.1-flash-lite', request: promptsRequest, fetchImpl
+    })).resolves.toMatchObject({ title: draft.title });
+  });
+
+  it('uses JSON mode without the deeply nested response schema at video prompts', async () => {
+    const fetchImpl = vi.fn(async (_url: string | URL | Request, init?: RequestInit) => {
+      const body = JSON.parse(String(init?.body)) as {
+        generationConfig: Record<string, unknown>;
+        contents: { parts: { text: string }[] }[];
+      };
+      expect(body.generationConfig).toEqual({ responseMimeType: 'application/json' });
+      expect(body.contents[0]?.parts[0]?.text).toContain('REQUIRED PRODUCTION JSON SHAPE');
+      expect(body.contents[0]?.parts[0]?.text).toContain(JSON.stringify(WRITER_RESPONSE_JSON_SCHEMA));
+      return new Response(JSON.stringify({ candidates: [{ content: { parts: [{ text: JSON.stringify(draft) }] } }] }), { status: 200 });
+    });
+
+    await expect(requestGeminiWriter({
+      apiKey: 'test-key', modelId: 'gemini-3.1-flash-lite', request: promptsRequest, fetchImpl
+    })).resolves.toMatchObject({ screenplay: 'Approved screenplay' });
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+  });
+
+  it('still rejects invalid production JSON without silently saving it', async () => {
+    const fetchImpl = vi.fn(async () => new Response(JSON.stringify({
+      candidates: [{ content: { parts: [{ text: JSON.stringify({ ...draft, scenes: [] }) }] } }]
+    }), { status: 200 }));
+
+    await expect(requestGeminiWriter({
+      apiKey: 'test-key', modelId: 'gemini-3.1-flash-lite', request: promptsRequest, fetchImpl
+    })).rejects.toThrow('invalid project draft');
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+  });
+
+  it('reports a truncated response instead of the misleading invalid JSON error', async () => {
+    const fetchImpl = vi.fn(async () => new Response(JSON.stringify({ candidates: [{
+      content: { parts: [{ text: '{"title":"cut off' }] }, finishReason: 'MAX_TOKENS'
+    }] }), { status: 200 }));
+
+    await expect(requestGeminiWriter({
+      apiKey: 'test-key', modelId: 'gemini-3.1-flash-lite', request: promptsRequest, fetchImpl
+    })).rejects.toThrow(/truncated before valid JSON.*MAX_TOKENS/);
+  });
+
+  it('does not expose a prompt echoed by a stage-4 HTTP 400 or retry automatically', async () => {
+    const fetchImpl = vi.fn(async () => new Response(JSON.stringify({
+      error: { message: 'Invalid argument: private approved screenplay and test-key' }
+    }), { status: 400 }));
+
+    await expect(requestGeminiWriter({
+      apiKey: 'test-key', modelId: 'gemini-3.1-flash-lite', request: promptsRequest, fetchImpl
+    })).rejects.toThrow('The approved stages are unchanged');
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+    try {
+      await requestGeminiWriter({
+        apiKey: 'test-key', modelId: 'gemini-3.1-flash-lite', request: promptsRequest, fetchImpl
+      });
+    } catch (error) {
+      expect(String(error)).not.toContain('private approved screenplay');
+      expect(String(error)).not.toContain('test-key');
+    }
+  });
+
   it('sends structured output through a header-only API key and parses the draft', async () => {
     const fetchImpl = vi.fn(async (url: string | URL | Request, init?: RequestInit) => {
       expect(String(url)).toContain('/gemini-3.1-pro-preview:generateContent');

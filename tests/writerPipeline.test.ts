@@ -153,6 +153,8 @@ describe('manual Writer pipeline', () => {
     expect(compileWriterPrompt(request)).toContain('Manually revised');
     expect(compileWriterPrompt(request)).not.toContain('BRIEF (source data)');
     expect(compileWriterPrompt(request)).not.toContain(brief.sourceText);
+    const styledRequest = { ...request, customVideoStyle: 'Traditional 2D Cel Animation with hand-painted cels.' };
+    expect(compileWriterPrompt(styledRequest)).toContain('CUSTOM VIDEO STYLE DIRECTION: Traditional 2D Cel Animation');
   });
 
   it('regenerates from the saved current stage, not just the original brief', () => {
@@ -236,6 +238,13 @@ describe('manual Writer pipeline', () => {
     const draft = artifactFromWriterDraft('prompts', production, 'test');
     expect(saveWriterArtifact(state, draft, false).artifacts[3]?.approved).toBe(false);
     expect(() => saveWriterArtifact(state, draft, true)).toThrow('Shot total is 16s');
+  });
+
+  it('accepts a shot total within ten seconds of the requested duration', () => {
+    const within = { ...approvedWriting(), requestJson: JSON.stringify({ ...brief, targetDurationSeconds: 26 }) };
+    expect(saveWriterArtifact(within, artifactFromWriterDraft('prompts', production, 'test'), true).artifacts[3]?.approved).toBe(true);
+    const outside = { ...approvedWriting(), requestJson: JSON.stringify({ ...brief, targetDurationSeconds: 27 }) };
+    expect(() => saveWriterArtifact(outside, artifactFromWriterDraft('prompts', production, 'test'), true)).toThrow('within ±10s');
   });
 
   it('requires exact canonical character names when approving production prompts', () => {

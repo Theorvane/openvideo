@@ -44,6 +44,48 @@ async function providerError(response: Response, secret: string): Promise<string
   return detail.replaceAll(secret, '[REDACTED]').slice(0, 300);
 }
 
+type GeminiWriterCandidate = {
+  readonly content?: { readonly parts?: readonly { readonly text?: string; readonly thought?: boolean }[] };
+  readonly finishReason?: string;
+  readonly finishMessage?: string;
+};
+
+/**
+ * Gemini JSON mode normally returns a bare object, but a model can still wrap
+ * it in a Markdown fence or a short introduction when the full response
+ * schema is intentionally omitted. Extract only one balanced object; the
+ * semantic validator remains the authority after this syntax normalization.
+ */
+export function extractWriterJson(text: string): string | null {
+  const fenced = text.match(/```(?:json)?\s*([\s\S]*?)```/i)?.[1] ?? text;
+  const source = fenced.replace(/^\uFEFF/, '').trim();
+  const start = source.indexOf('{');
+  if (start < 0) return null;
+
+  let depth = 0;
+  let inString = false;
+  let escaped = false;
+  for (let index = start; index < source.length; index += 1) {
+    const character = source[index];
+    if (inString) {
+      if (escaped) escaped = false;
+      else if (character === '\\') escaped = true;
+      else if (character === '"') inString = false;
+      continue;
+    }
+    if (character === '"') {
+      inString = true;
+      continue;
+    }
+    if (character === '{') depth += 1;
+    else if (character === '}') {
+      depth -= 1;
+      if (depth === 0) return source.slice(start, index + 1);
+    }
+  }
+  return null;
+}
+
 export async function requestGeminiWriter(input: GeminiWriterInput): Promise<WriterDraft> {
   const request = parseWriterRequest(input.request);
   if (request === null) throw new Error('Writer request is invalid.');
@@ -65,20 +107,39 @@ export async function requestGeminiWriter(input: GeminiWriterInput): Promise<Wri
           contents: [{ role: 'user', parts: [{ text: compileWriterPrompt(request) }] }],
           generationConfig: {
             responseMimeType: 'application/json',
-            responseJsonSchema: writerResponseSchema(request)
+            // The nested scene/shot schema may exceed Gemini's structured
+            // output complexity limit and fail with a generic 400. For the
+            // final production stage JSON mode plus the prompt contract keeps
+            // the request small; validateWriterResponse remains authoritative.
+            ...(request.stage === 'prompts' ? {} : { responseJsonSchema: writerResponseSchema(request) })
           }
         })
       }
     );
     if (!response.ok) {
+      if (response.status === 400 && request.stage === 'prompts') {
+        // Gemini can echo pieces of submitted content in an error body. Do not
+        // surface it, and do not retry a potentially billable request for the
+        // user. The approved upstream artifacts remain available for a retry.
+        throw new Error('Gemini rejected Video prompts (HTTP 400). The approved stages are unchanged. Try a shorter approved breakdown or another Writer model; no automatic retry was sent.');
+      }
       const detail = await providerError(response, input.apiKey.trim());
       throw new Error(`Gemini Writer failed with status ${response.status}${detail.length > 0 ? `: ${detail}` : ''}.`);
     }
-    const payload = await response.json() as {
-      candidates?: readonly { content?: { parts?: readonly { text?: string }[] } }[];
-    };
-    const json = payload.candidates?.[0]?.content?.parts?.map((part) => part.text ?? '').join('').trim();
-    if (!json) throw new Error('Gemini Writer returned an empty response.');
+    const payload = await response.json() as { candidates?: readonly GeminiWriterCandidate[] };
+    const candidate = payload.candidates?.[0];
+    const finishReason = candidate?.finishReason;
+    if (finishReason === 'MAX_TOKENS') {
+      throw new Error('Gemini Writer output was truncated before valid JSON (MAX_TOKENS). Shorten the approved breakdown or use the Pro Writer model; no automatic retry was sent.');
+    }
+    if (finishReason !== undefined && !['STOP', 'FINISH_REASON_UNSPECIFIED'].includes(finishReason)) {
+      throw new Error(`Gemini Writer stopped before returning a usable draft (${finishReason}). The approved stages are unchanged.`);
+    }
+    const parts = candidate?.content?.parts ?? [];
+    const visibleText = parts.filter((part) => part.thought !== true).map((part) => part.text ?? '').join('');
+    const allText = parts.map((part) => part.text ?? '').join('');
+    const json = extractWriterJson(visibleText || allText);
+    if (json === null) throw new Error('Gemini Writer returned invalid JSON. The response did not contain a complete JSON object.');
     let decoded: unknown;
     try {
       decoded = JSON.parse(json);

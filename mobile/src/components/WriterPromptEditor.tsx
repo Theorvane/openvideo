@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Pressable, Text, TextInput, View } from 'react-native';
 import { editWriterPromptShot, parseWriterPromptText } from '@openvideo/shared/writerPipeline';
-import { writerDraftDurationSeconds } from '@openvideo/shared/writerWorkflow';
+import { writerDraftDurationMatchesTarget, writerDraftDurationSeconds, WRITER_DURATION_TOLERANCE_SECONDS } from '@openvideo/shared/writerWorkflow';
 import { theme } from '../lib/theme';
 import { MIN_TAP, press } from '../lib/touch';
 
@@ -14,8 +14,9 @@ export function WriterPromptEditor({ content, targetSeconds, disabled, onChange 
   const inputStyle = { color: theme.text, minHeight: MIN_TAP, borderWidth: 1, borderColor: theme.line, padding: 10, borderRadius: 8 };
   if (!draft) return <Text style={textStyle}>Fix the JSON below to enable the shot editor. Incomplete JSON can still be saved as a draft.</Text>;
   const seconds = writerDraftDurationSeconds(draft);
+  const timingMatches = writerDraftDurationMatchesTarget(draft, targetSeconds);
   return <View style={{ gap: 12 }}>
-    <Text style={textStyle}>{draft.scenes.length} scenes · {seconds}s / {targetSeconds}s requested{seconds === targetSeconds ? ' — timing matches' : ' — adjust before approval'}</Text>
+    <Text style={textStyle}>{draft.scenes.length} scenes · {seconds}s / {targetSeconds}s requested{timingMatches ? (seconds === targetSeconds ? ' — timing matches' : ` — within ±${WRITER_DURATION_TOLERANCE_SECONDS}s tolerance`) : ' — adjust before approval'}</Text>
     <Text style={textStyle}>Characters: {draft.characters.map((c) => c.name + ': ' + c.invariantDescription).join('\n')}</Text>
     {draft.scenes.map((scene, si) => <View key={si} style={{ gap: 8 }}>
       <Pressable accessibilityRole="button" accessibilityState={{ expanded: openScene === si }} onPress={() => setOpenScene(openScene === si ? null : si)} style={press({ minHeight: MIN_TAP, justifyContent: 'center' })}>

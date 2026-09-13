@@ -4,7 +4,7 @@ import { getDomainModels, isDomainModelAvailableOnRuntime } from '@openvideo/sha
 import { createEmptyAiProjectDocument, type AiProjectDocument } from '@openvideo/shared/aiProjectDomain';
 import { requestWriter } from '@openvideo/shared/writerGeneration';
 import { getLlmProvider } from '@openvideo/shared/llmProviders';
-import { WRITER_MODEL_IDS, WRITER_VIDEO_STYLES, WRITER_EMOTIONAL_GOALS, type WriterMode, type WriterRequest, type WriterVideoStyle, type WriterEmotionalGoal } from '@openvideo/shared/writerWorkflow';
+import { WRITER_MODEL_IDS, WRITER_VIDEO_STYLES, WRITER_VIDEO_STYLE_LABELS, WRITER_EMOTIONAL_GOALS, type WriterMode, type WriterRequest, type WriterVideoStyle, type WriterEmotionalGoal } from '@openvideo/shared/writerWorkflow';
 import { pipelineBaseRequest, pipelineMatchesBrief } from '@openvideo/shared/writerPipeline';
 import { WRITER_STAGES, WRITER_STAGE_LABELS, WRITER_STAGE_CHECKLISTS, canOpenWriterStage } from '@openvideo/shared/writerStages';
 import { createUseWriterPipeline } from '@openvideo/shared/useWriterPipeline';
@@ -40,6 +40,7 @@ function ProjectWriterScreen({ topInset, keyboardOffset, projectId, connectionsV
   const [durationText, setDurationText] = useState(String(initial?.targetDurationSeconds ?? 60));
   const [parentScriptId, setParentScriptId] = useState(initial?.parentScriptId ?? '');
   const [videoStyle, setVideoStyle] = useState<WriterVideoStyle | ''>(initial?.videoStyle ?? '');
+  const [customVideoStyle, setCustomVideoStyle] = useState(initial?.customVideoStyle ?? '');
   const [emotionalGoal, setEmotionalGoal] = useState<WriterEmotionalGoal | ''>(initial?.emotionalGoal ?? '');
   const [notes, setNotes] = useState('');
   const contentInput = useRef<TextInput>(null);
@@ -59,7 +60,7 @@ function ProjectWriterScreen({ topInset, keyboardOffset, projectId, connectionsV
   const available = model !== undefined && isDomainModelAvailableOnRuntime(model, 'mobile');
   const base: WriterRequest = {
     mode, sourceText: sourceText.trim(), language: language.trim(), audience: audience.trim(), tone: tone.trim(), targetDurationSeconds,
-    ...(videoStyle ? { videoStyle } : {}), ...(emotionalGoal ? { emotionalGoal } : {}),
+    ...(videoStyle ? { videoStyle } : {}), ...(customVideoStyle.trim() ? { customVideoStyle: customVideoStyle.trim() } : {}), ...(emotionalGoal ? { emotionalGoal } : {}),
     ...(mode === 'rewrite' && parent ? { parentScriptId: parent.id, currentScreenplay: parent.screenplay } : {})
   };
   const briefChanged = flow.state !== undefined && !pipelineMatchesBrief(flow.state, base);
@@ -112,8 +113,9 @@ function ProjectWriterScreen({ topInset, keyboardOffset, projectId, connectionsV
       {field('Audience', audience, setAudience)}{field('Tone', tone, setTone)}
       <Text style={styles.label}>Video style</Text>
       <View style={styles.row}>{(['', ...WRITER_VIDEO_STYLES] as const).map((value) => <View key={value}>
-        {action((videoStyle === value ? '✓ ' : '') + (value || 'Auto'), () => setVideoStyle(value), !editable)}
+        {action((videoStyle === value ? '✓ ' : '') + (value ? WRITER_VIDEO_STYLE_LABELS[value] : 'Auto'), () => setVideoStyle(value), !editable)}
       </View>)}</View>
+      {field('Custom video style (optional)', customVideoStyle, setCustomVideoStyle)}
       <Text style={styles.label}>Emotional goal</Text>
       <View style={styles.row}>{(['', ...WRITER_EMOTIONAL_GOALS] as const).map((value) => <View key={value}>
         {action((emotionalGoal === value ? '✓ ' : '') + (value || 'Auto'), () => setEmotionalGoal(value), !editable)}

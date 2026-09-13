@@ -2,7 +2,8 @@ import type { AiProjectDocument, StyleBible } from './aiProjectDomain';
 import { isPlainRecord } from './timelineValidationPrimitives';
 import {
   applyWriterDraft, parseWriterRequest, validateWriterDraft, validateWriterResponse,
-  writerDraftDurationSeconds, type WriterDraft, type WriterDraftShot, type WriterRequest
+  writerDraftDurationMatchesTarget, writerDraftDurationSeconds, WRITER_DURATION_TOLERANCE_SECONDS,
+  type WriterDraft, type WriterDraftShot, type WriterRequest
 } from './writerWorkflow';
 import {
   WRITER_STAGES, canOpenWriterStage, parseWriterPipelineState, putWriterArtifact,
@@ -130,8 +131,8 @@ export function saveWriterArtifact(state: WriterPipelineState, artifact: WriterS
   }
   const draft = validateWriterArtifact(state, artifact);
   const base = pipelineBaseRequest(state)!;
-  if (approve && artifact.stage === 'prompts' && writerDraftDurationSeconds(draft) !== base.targetDurationSeconds) {
-    throw new Error(`Shot total is ${writerDraftDurationSeconds(draft)}s; the brief requests ${base.targetDurationSeconds}s. Adjust the shots or revise the breakdown before approval.`);
+  if (approve && artifact.stage === 'prompts' && !writerDraftDurationMatchesTarget(draft, base.targetDurationSeconds)) {
+    throw new Error(`Shot total is ${writerDraftDurationSeconds(draft)}s; the brief requests ${base.targetDurationSeconds}s. Adjust the shots or revise the breakdown before approval (within ±${WRITER_DURATION_TOLERANCE_SECONDS}s is accepted).`);
   }
   const normalized = { ...artifactFromWriterDraft(artifact.stage, draft, artifact.modelId), approved: approve };
   const next = putWriterArtifact(state, normalized);

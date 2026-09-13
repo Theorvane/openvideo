@@ -5,20 +5,29 @@ const readRepo = (path: string): Promise<string> => readFile(new URL(`../${path}
 
 describe('Writer surface parity', () => {
   it('uses the same shared generation and document application rules on desktop and mobile', async () => {
-    const [desktop, mobile, preload, main, editor] = await Promise.all([
+    const [desktop, mobile, desktopPromptEditor, mobilePromptEditor, preload, main, editor] = await Promise.all([
       readRepo('src/renderer/src/WriterWorkspace.tsx'),
       readRepo('mobile/src/screens/WriterScreen.tsx'),
+      readRepo('src/renderer/src/WriterPromptEditor.tsx'),
+      readRepo('mobile/src/components/WriterPromptEditor.tsx'),
       readRepo('src/preload/index.ts'),
       readRepo('src/main/registerWriterIpcHandler.ts'),
       readRepo('src/renderer/src/editor/useTimelineEditor.ts')
     ]);
     expect(desktop).toContain("from '../../shared/writerWorkflow'");
     expect(desktop).toContain('useWriterPipeline(document, onSave)');
+    expect(desktop).toContain('customVideoStyle');
+    expect(desktop).toContain('WRITER_VIDEO_STYLE_LABELS');
+    expect(desktop).toContain('approvalBlockedReason');
+    expect(desktopPromptEditor).toContain('writerDraftDurationMatchesTarget');
     expect(mobile).toContain("from '@openvideo/shared/writerWorkflow'");
     expect(mobile).toContain("from '@openvideo/shared/writerGeneration'");
     expect(mobile).toContain("isDomainModelAvailableOnRuntime(model, 'mobile')");
     expect(mobile).toContain('requestWriter({');
     expect(mobile).toContain('useWriterPipeline(project?.ai');
+    expect(mobile).toContain('customVideoStyle');
+    expect(mobile).toContain('WRITER_VIDEO_STYLE_LABELS');
+    expect(mobilePromptEditor).toContain('writerDraftDurationMatchesTarget');
     for (const surface of [desktop, mobile]) {
       expect(surface).toContain('createUseWriterPipeline({ useEffect, useRef, useState })');
       expect(surface).toContain('canOpenWriterStage(');
