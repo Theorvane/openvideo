@@ -1,9 +1,12 @@
 name: Auto-merge AI-approved pull requests
 
 on:
-  pull_request_review:
-    types: [submitted]
+  schedule:
+    - cron: '*/5 * * * *'
+  workflow_dispatch:
 
+# Scheduled and manually dispatched runs execute from the trusted default branch.
+# They only query GitHub metadata; pull-request code is never checked out or run.
 permissions:
   contents: write
   pull-requests: write
@@ -11,28 +14,25 @@ permissions:
 
 jobs:
   enable-automerge:
-    if: >-
-      github.event.review.state == 'approved' &&
-      github.event.review.user.login == 'sjungwon03-ai' &&
-      github.event.review.commit_id == github.event.pull_request.head.sha &&
-      github.event.pull_request.draft == false &&
-      (github.event.pull_request.base.ref == 'dev' || github.event.pull_request.base.ref == 'main')
     runs-on: ubuntu-latest
     steps:
-      - name: Label and enable auto-merge
+      - name: Enable auto-merge for current-head AI approvals
         env:
           GH_TOKEN: ${{ github.token }}
-          PR_NUMBER: ${{ github.event.pull_request.number }}
         run: |
-          gh api --method POST \
-            "repos/${GITHUB_REPOSITORY}/issues/${PR_NUMBER}/labels" \
-            -f "labels[]=ai-approved"
-          if gh pr view "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" --json labels --jq ".labels[].name" | grep -Fxq "ai-review-requested"; then
-            gh api --method DELETE \
-              "repos/${GITHUB_REPOSITORY}/issues/${PR_NUMBER}/labels/ai-review-requested"
-          fi
-          if [ "${{ github.event.pull_request.base.ref }}" = "main" ]; then
-            gh pr merge "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" --auto --merge --delete-branch
-          else
-            gh pr merge "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" --auto --squash --delete-branch
-          fi
+          set -euo pipefail
+          query='query { repository(owner: "'"${GITHUB_REPOSITORY%/*}"'", name: "'"${GITHUB_REPOSITORY#*/}"'") { pullRequests(first: 100, states: OPEN) { nodes { number isDraft baseRefName headRefOid reviews(last: 100) { nodes { state author { login } commit { oid } } } } } } }'
+          gh api graphql -f query="$query" > pull-requests.json
+          jq -r '
+            .data.repository.pullRequests.nodes[]
+            | select(.isDraft | not)
+            | select(.baseRefName == "dev" or .baseRefName == "main")
+            | select(any(.reviews.nodes[]; .state == "APPROVED" and .author.login == "sjungwon03-ai" and .commit.oid == .headRefOid))
+            | .number
+          ' pull-requests.json | while read -r number; do
+            gh api --method POST "repos/${GITHUB_REPOSITORY}/issues/${number}/labels" -f 'labels[]=ai-approved'
+            if gh pr view "$number" --repo "$GITHUB_REPOSITORY" --json labels --jq '.labels[].name' | grep -Fxq 'ai-review-requested'; then
+              gh api --method DELETE "repos/${GITHUB_REPOSITORY}/issues/${number}/labels/ai-review-requested"
+            fi
+            gh pr merge "$number" --repo "$GITHUB_REPOSITORY" --auto --squash --delete-branch
+          done
