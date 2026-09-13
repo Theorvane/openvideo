@@ -29,4 +29,16 @@ describe('production board surface parity', () => {
     expect(mobileStore).toContain('assembleApprovedProductionCut({');
     expect(desktop).not.toContain('aiGenerateVideo');
   });
+
+  it('exposes image import in Editing for the production board reference library', async () => {
+    const [assetBin, main] = await Promise.all([
+      source('src/renderer/src/editor/AssetBin.tsx'),
+      source('src/main/index.ts')
+    ]);
+    expect(assetBin).toContain("editor.importAssets(['image'])");
+    expect(assetBin).toContain('+ Image');
+    expect(assetBin).toContain('Local video, audio and images stay on this machine.');
+    expect(main).toContain("acceptedKinds[0] === 'image'");
+    expect(main).toContain("extensions: ['jpeg', 'jpg', 'png', 'webp']");
+  });
 });

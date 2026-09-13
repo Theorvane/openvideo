@@ -5,6 +5,7 @@ import type { TransitionType } from '../../../shared/timelineTypes';
 import type { TimelineTitleStyle } from '../../../shared/timelineTypes';
 import { applyCaptionPreset, CAPTION_FONT_WEIGHTS, CAPTION_PLACEMENTS, CAPTION_STYLE_PRESETS, isAutomaticCaptionId, resolvedTitleStyle, type CaptionPresetId } from '../../../shared/captionStyle';
 import { clipDurationMs } from '../../../shared/timelineClipGeometry';
+import { STILL_DEFAULT_HOLD_MS } from '../../../shared/timelineStills';
 import { formatDuration, formatTimestamp } from '../format';
 import { Button, MetadataList, PanelHeading, TabPanel, Tabs } from '../ui';
 import type { TabDefinition } from '../ui';
@@ -538,8 +539,10 @@ function AssetInspector({ editor }: InspectorContentProps): ReactElement {
       <PropertyGroup title="Details">
         <PropertyRow label="Imported"><span className="property-value-chip">{formatTimestamp(asset.createdAt)}</span></PropertyRow>
         <PropertyRow label="Kind"><span className="property-value-chip property-value-chip--capitalize">{asset.kind}</span></PropertyRow>
-        <PropertyRow label="Duration">
-          <span className="property-value-chip">{asset.metadata === null ? 'Pending' : formatDuration(asset.metadata.durationMs)}</span>
+        <PropertyRow label={asset.kind === 'image' ? 'Default hold' : 'Duration'}>
+          <span className="property-value-chip">
+            {asset.kind === 'image' ? formatDuration(STILL_DEFAULT_HOLD_MS) : asset.metadata === null ? 'Pending' : formatDuration(asset.metadata.durationMs)}
+          </span>
         </PropertyRow>
       </PropertyGroup>
     </section>

@@ -16,6 +16,7 @@ import {
 } from '../src/renderer/src/editor/editorTimelineView';
 import { createTimelineHistory, pushTimelineHistory, redoTimelineHistory, undoTimelineHistory } from '../src/renderer/src/editor/editorTimelineHistory';
 import { INITIAL_AUDIO_TRACK_ID, INITIAL_VIDEO_TRACK_ID, createInitialTimeline, placeClip } from '../src/shared/timelineLogic';
+import { STILL_DEFAULT_HOLD_MS } from '../src/shared/timelineStills';
 import { DEFAULT_CLIP_EFFECTS, type MediaAsset, type TimelineClip, type TimelineDocument } from '../src/shared/timelineTypes';
 
 function makeAsset(overrides: Partial<MediaAsset> = {}): MediaAsset {
@@ -70,6 +71,31 @@ describe('editor timeline view helpers', () => {
       sourceEndMs: 4_000,
       sourceDurationMs: 4_000
     });
+  });
+
+  it('treats an imported image as a ready four-second still on the video track', () => {
+    const image = makeAsset({
+      id: 'asset-image',
+      displayName: 'character.png',
+      kind: 'image',
+      metadata: null,
+      mimeType: 'image/png',
+      projectRelativePath: 'assets/asset-image/original.png'
+    });
+    const timeline = createInitialTimeline();
+
+    expect(mediaAssetReady(image)).toBe(true);
+    expect(findFirstCompatibleTrack(timeline, 'image')?.id).toBe(INITIAL_VIDEO_TRACK_ID);
+    expect(buildClipFromAsset(image, 'clip-image', 250)).toEqual({
+      id: 'clip-image',
+      assetId: 'asset-image',
+      timelineStartMs: 250,
+      sourceStartMs: 0,
+      sourceEndMs: STILL_DEFAULT_HOLD_MS,
+      sourceDurationMs: STILL_DEFAULT_HOLD_MS
+    });
+    expect(placeReadyAssetOnTimeline(timeline, image, INITIAL_VIDEO_TRACK_ID, 'clip-image', 0)).not.toBeNull();
+    expect(placeReadyAssetOnTimeline(timeline, image, INITIAL_AUDIO_TRACK_ID, 'clip-image', 0)).toBeNull();
   });
 
   it('finds compatible tracks and the next insertion point', () => {

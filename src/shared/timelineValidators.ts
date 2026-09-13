@@ -72,7 +72,7 @@ export function parseImportProjectAssetsInput(value: unknown): ImportProjectAsse
   }
   const acceptedKinds: MediaKind[] = [];
   for (const kind of value.acceptedKinds) {
-    const parsedKind = getMediaKind({ kind }, 'kind');
+    const parsedKind = getMediaKind({ kind }, 'kind') ?? (kind === 'image' ? 'image' : null);
     if (parsedKind === null) {
       return null;
     }

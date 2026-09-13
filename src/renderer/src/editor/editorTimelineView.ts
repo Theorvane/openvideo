@@ -1,4 +1,5 @@
 import { clipDurationMs, clipTimelineEndMs, placeClip, timelineDurationMs } from '../../../shared/timelineLogic';
+import { STILL_DEFAULT_HOLD_MS, stillClipSource, trackKindForAsset } from '../../../shared/timelineStills';
 import type { MediaAsset, MediaKind, TimelineClip, TimelineDocument, TimelineTrack } from '../../../shared/timelineTypes';
 
 export type ClipBlock = {
@@ -49,11 +50,12 @@ function clamp(value: number, min: number, max: number): number {
 }
 
 export function mediaAssetReady(asset: MediaAsset): boolean {
-  return asset.metadata !== null && asset.metadata.durationMs > 0;
+  return asset.kind === 'image' || (asset.metadata !== null && asset.metadata.durationMs > 0);
 }
 
 export function findFirstCompatibleTrack(timeline: TimelineDocument, kind: MediaKind): TimelineTrack | null {
-  return timeline.tracks.find((track) => track.kind === kind) ?? null;
+  const trackKind = trackKindForAsset(kind);
+  return timeline.tracks.find((track) => track.kind === trackKind) ?? null;
 }
 
 export function insertionStartForTrack(track: TimelineTrack): number {
@@ -61,6 +63,14 @@ export function insertionStartForTrack(track: TimelineTrack): number {
 }
 
 export function buildClipFromAsset(asset: MediaAsset, id: string, timelineStartMs: number): TimelineClip | null {
+  if (asset.kind === 'image') {
+    return {
+      id,
+      assetId: asset.id,
+      timelineStartMs,
+      ...stillClipSource(STILL_DEFAULT_HOLD_MS)
+    };
+  }
   const metadata = asset.metadata;
   if (metadata === null || metadata.durationMs <= 0) {
     return null;
@@ -83,7 +93,7 @@ export function placeReadyAssetOnTimeline(
   timelineStartMs: number
 ): PlacedTimelineAsset | null {
   const targetTrack = timeline.tracks.find((track) => track.id === targetTrackId);
-  if (targetTrack === undefined || targetTrack.kind !== asset.kind) {
+  if (targetTrack === undefined || targetTrack.kind !== trackKindForAsset(asset.kind)) {
     return null;
   }
 

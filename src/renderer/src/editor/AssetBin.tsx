@@ -2,6 +2,7 @@ import { useState, type CSSProperties, type ReactElement } from 'react';
 
 import { formatBytes, formatDuration } from '../format';
 import type { MediaAsset } from '../../../shared/timelineTypes';
+import { mediaAssetReady } from './editorTimelineView';
 import type { TimelineEditorController } from './useTimelineEditor';
 
 type AssetBinProps = {
@@ -19,8 +20,15 @@ const COMPACT_PANEL_STYLE = {
 
 function assetDurationLabel(asset: MediaAsset, failureMessage: string | undefined): string {
   if (failureMessage !== undefined) return failureMessage;
+  if (asset.kind === 'image') return 'Still image';
   if (asset.metadata === null) return 'Reading metadata';
   return formatDuration(asset.metadata.durationMs);
+}
+
+function assetGlyph(asset: MediaAsset): string {
+  if (asset.kind === 'video') return '🎬';
+  if (asset.kind === 'image') return '🖼️';
+  return '🎵';
 }
 
 export function AssetBin({ editor }: AssetBinProps): ReactElement {
@@ -67,7 +75,10 @@ export function AssetBin({ editor }: AssetBinProps): ReactElement {
         <button className="button button--ghost asset-bin__toolbar-button" type="button" onClick={() => void editor.importAssets(['audio'])} disabled={project === null || editor.isBusy}>
           + Audio
         </button>
-        <button className="button button--primary asset-bin__toolbar-button" type="button" onClick={editor.placeSelectedAsset} disabled={editor.selectedAsset?.metadata === null || editor.selectedAsset === null}>
+        <button className="button button--ghost asset-bin__toolbar-button" type="button" onClick={() => void editor.importAssets(['image'])} disabled={project === null || editor.isBusy}>
+          + Image
+        </button>
+        <button className="button button--primary asset-bin__toolbar-button" type="button" onClick={editor.placeSelectedAsset} disabled={editor.selectedAsset === null || !mediaAssetReady(editor.selectedAsset)}>
           Place
         </button>
       </div>
@@ -78,12 +89,12 @@ export function AssetBin({ editor }: AssetBinProps): ReactElement {
         <button
           className="asset-bin__dropzone"
           type="button"
-          onClick={() => void editor.importAssets(['video'])}
+          onClick={() => void editor.importAssets()}
           disabled={editor.isBusy}
         >
           <span aria-hidden="true" className="asset-bin__dropzone-icon">⬆</span>
           <strong>Import media</strong>
-          <span>Local video and audio stay on this machine.</span>
+          <span>Local video, audio and images stay on this machine.</span>
         </button>
       ) : viewMode === 'grid' ? (
         <div className="asset-grid asset-grid--tiles" aria-label="Imported project assets">
@@ -95,14 +106,14 @@ export function AssetBin({ editor }: AssetBinProps): ReactElement {
               <div key={asset.id} className="asset-tile-entry">
                 <button
                   className={`asset-tile${selected ? ' asset-tile--selected' : ''}`}
-                  draggable={asset.metadata !== null}
+                  draggable={mediaAssetReady(asset)}
                   type="button"
                   onClick={() => editor.setSelectedAssetId(asset.id)}
                   onDragStart={(event) => onAssetDragStart(event, asset.id)}
                   title={asset.displayName}
                 >
                   <span className={`asset-tile__preview asset-tile__preview--${asset.kind}`} aria-hidden="true">
-                    <span className="asset-tile__glyph">{asset.kind === 'video' ? '🎬' : '🎵'}</span>
+                    <span className="asset-tile__glyph">{assetGlyph(asset)}</span>
                     <span className={`asset-tile__kind asset-card__kind asset-card__kind--${asset.kind}`}>{asset.kind}</span>
                     <span className="asset-tile__duration">{assetDurationLabel(asset, failureMessage)}</span>
                   </span>
@@ -126,13 +137,13 @@ export function AssetBin({ editor }: AssetBinProps): ReactElement {
               <div key={asset.id} className="asset-tile-entry">
                 <button
                   className={`asset-row${selected ? ' asset-row--selected' : ''}`}
-                  draggable={asset.metadata !== null}
+                  draggable={mediaAssetReady(asset)}
                   type="button"
                   onClick={() => editor.setSelectedAssetId(asset.id)}
                   onDragStart={(event) => onAssetDragStart(event, asset.id)}
                   title={asset.displayName}
                 >
-                  <span className={`asset-row__thumb asset-row__thumb--${asset.kind}`} aria-hidden="true">{asset.kind === 'video' ? '🎬' : '🎵'}</span>
+                  <span className={`asset-row__thumb asset-row__thumb--${asset.kind}`} aria-hidden="true">{assetGlyph(asset)}</span>
                   <span className="asset-row__body">
                     <strong className="asset-row__name">{asset.displayName}</strong>
                     <small className="asset-row__meta">{asset.kind} · {formatBytes(asset.byteLength)}</small>

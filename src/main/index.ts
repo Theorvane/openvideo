@@ -172,6 +172,9 @@ function resolveRecordingsDirectory(): string {
 }
 
 function dialogFilters(acceptedKinds: readonly MediaKind[] | undefined, extensions: readonly string[]): Electron.FileFilter[] {
+  if (acceptedKinds?.length === 1 && acceptedKinds[0] === 'image') {
+    return [{ name: 'Images', extensions: ['jpeg', 'jpg', 'png', 'webp'] }];
+  }
   if (acceptedKinds?.length === 1 && acceptedKinds[0] === 'audio') {
     return [{ name: 'Audio', extensions: ['m4a', 'mp3', 'wav', 'webm'] }];
   }

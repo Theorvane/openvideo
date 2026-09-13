@@ -285,15 +285,19 @@ export function ProgramMonitor({ editor, exportControl }: ProgramMonitorProps): 
           if (mediaRef.current !== event.currentTarget) return;
           reportMediaFailure(readyAttemptId);
         };
-        const mediaLabel = `${asset.kind === 'video' ? 'Video' : 'Audio'} preview: ${asset.displayName}`;
-        preview = asset.kind === 'video'
-	          ? <video ref={setMediaElement} key={readyAttemptId} src={previewLoadState.url} aria-label={mediaLabel} controls={false} playsInline style={activeVideoStyle} onAbort={onMediaFailure} onEnded={handleMediaEnded} onError={onMediaFailure} />
-          : (
+        const mediaLabel = `${asset.kind === 'video' ? 'Video' : asset.kind === 'image' ? 'Image' : 'Audio'} preview: ${asset.displayName}`;
+        if (asset.kind === 'video') {
+          preview = <video ref={setMediaElement} key={readyAttemptId} src={previewLoadState.url} aria-label={mediaLabel} controls={false} playsInline style={activeVideoStyle} onAbort={onMediaFailure} onEnded={handleMediaEnded} onError={onMediaFailure} />;
+        } else if (asset.kind === 'image') {
+          preview = <img key={readyAttemptId} src={previewLoadState.url} alt={mediaLabel} style={activeVideoStyle} onError={() => reportMediaFailure(readyAttemptId)} />;
+        } else {
+          preview = (
             <div className="preview-frame__empty">
               <span>{mediaLabel}</span>
               <audio ref={setMediaElement} key={readyAttemptId} src={previewLoadState.url} aria-label={mediaLabel} controls={false} onAbort={onMediaFailure} onEnded={handleMediaEnded} onError={onMediaFailure} />
             </div>
           );
+        }
         break;
       }
     }

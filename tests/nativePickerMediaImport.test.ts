@@ -81,6 +81,41 @@ describe('native picker media import', () => {
     await expect(readFile(persistedPath)).resolves.toEqual(sourceBytes);
   });
 
+  it('imports a PNG selected from the image-only Editing picker as a project image asset', async () => {
+    const mediaFixture = await createMp4MediaFixture();
+    fixture = mediaFixture;
+    const imagePath = join(mediaFixture.directory, 'character.png');
+    const imageBytes = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+    await writeFile(imagePath, imageBytes);
+    const root = join(mediaFixture.directory, 'projects');
+    const projects = new ProjectStore(root);
+    const project = await projects.create({ name: 'Character references' });
+    let pickerInput: unknown;
+    const service = new TimelineIpcService({
+      projects,
+      assets: new AssetLibraryStore(root, projects),
+      selectMediaFiles: async (input) => {
+        pickerInput = input;
+        return { canceled: false, filePaths: [imagePath] };
+      }
+    });
+
+    const imported = await service.importProjectAssets({ projectId: project.id, acceptedKinds: ['image'] });
+
+    expect(pickerInput).toMatchObject({ acceptedKinds: ['image'] });
+    if (!imported.ok) throw new Error(`Expected PNG import to succeed: ${imported.error.message}`);
+    expect(imported.value.assets).toHaveLength(1);
+    const asset = imported.value.assets[0];
+    expect(asset).toMatchObject({
+      displayName: 'character.png',
+      kind: 'image',
+      mimeType: 'image/png',
+      metadata: null
+    });
+    if (asset === undefined) throw new Error('Expected one imported PNG asset.');
+    await expect(readFile(join(root, project.id, asset.projectRelativePath))).resolves.toEqual(imageBytes);
+  });
+
   it('rejects a real MP4 mixed with an unsupported selection atomically and without exposing paths', async () => {
     // Given
     const mediaFixture = await createMp4MediaFixture();

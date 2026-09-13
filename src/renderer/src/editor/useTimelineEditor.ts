@@ -40,7 +40,7 @@ import type { NarrationPlan } from '../../../shared/narrationPlan';
 import { applyTranscriptionCues, type TranscriptionDraft } from '../../../shared/transcription';
 import { errorMessage, type StatusMessage } from '../appTypes';
 import { createTimelineHistory, pushTimelineHistory, redoTimelineHistory, undoTimelineHistory, type TimelineHistory } from './editorTimelineHistory';
-import { clampPlayheadMs, findClipSelection, findFirstCompatibleTrack, insertionStartForTrack, nextTrackName, placeReadyAssetOnTimeline } from './editorTimelineView';
+import { clampPlayheadMs, findClipSelection, findFirstCompatibleTrack, insertionStartForTrack, mediaAssetReady, nextTrackName, placeReadyAssetOnTimeline } from './editorTimelineView';
 import { metadataProbeFailureMessage } from './mediaLoadFailures';
 import { useProjectAssetImports } from './useProjectAssetImports';
 import { useTimelinePlayback } from './useTimelinePlayback';
@@ -343,7 +343,7 @@ export function useTimelineEditor() {
   );
 
   const placeSelectedAsset = useCallback(() => {
-    if (project === null || selectedAsset === null || selectedAsset.metadata === null) return;
+    if (project === null || selectedAsset === null || !mediaAssetReady(selectedAsset)) return;
     const track = findFirstCompatibleTrack(project.timeline, selectedAsset.kind);
     if (track === null) return;
     const placement = placeReadyAssetOnTimeline(project.timeline, selectedAsset, track.id, createOpaqueId('clip'), insertionStartForTrack(track));
@@ -357,7 +357,7 @@ export function useTimelineEditor() {
   const placeAssetOnTimeline = useCallback((assetId: string): boolean => {
     if (project === null) return false;
     const asset = project.assets.find((candidate) => candidate.id === assetId);
-    if (asset === undefined || asset.metadata === null) return false;
+    if (asset === undefined || !mediaAssetReady(asset)) return false;
     const track = findFirstCompatibleTrack(project.timeline, asset.kind);
     if (track === null) return false;
     const placement = placeReadyAssetOnTimeline(project.timeline, asset, track.id, createOpaqueId('clip'), insertionStartForTrack(track));

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  assetsNeedingMetadata,
   filterPendingAssetsForDock,
   getDefaultEditorDockTabs,
   getDefaultEditorLeftDockTabId,
@@ -89,6 +90,21 @@ describe('editor dock tabs', () => {
     // Then
     expect(readyAssets.map((asset) => asset.id)).toEqual(['asset-ready']);
     expect(readyAssets[0]?.metadata).toEqual({ durationMs: 4_000, width: 1_920, height: 1_080 });
+  });
+
+  it('does not send imported still images through the audio and video metadata probe', () => {
+    const image = makeAsset({
+      id: 'asset-image',
+      displayName: 'character.png',
+      kind: 'image',
+      metadata: null,
+      mimeType: 'image/png',
+      projectRelativePath: 'assets/asset-image/original.png'
+    });
+    const pendingVideo = makeAsset({ id: 'asset-video', metadata: null });
+
+    expect(assetsNeedingMetadata([image, pendingVideo]).map((asset) => asset.id)).toEqual(['asset-video']);
+    expect(filterPendingAssetsForDock([image, pendingVideo]).map((asset) => asset.id)).toEqual(['asset-image']);
   });
 
   it('defaults the left dock to project before a project is loaded', () => {

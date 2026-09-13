@@ -99,9 +99,9 @@ export function getNextEditorDockTabId({ currentTabId, key, tabs }: EditorDockNa
 }
 
 export function assetsNeedingMetadata(assets: readonly MediaAsset[]): readonly MediaAsset[] {
-  return assets.filter((asset) => asset.metadata === null);
+  return assets.filter((asset) => asset.kind !== 'image' && asset.metadata === null);
 }
 
 export function filterPendingAssetsForDock(assets: readonly MediaAsset[]): readonly MediaAsset[] {
-  return assets.filter((asset) => asset.metadata !== null);
+  return assets.filter((asset) => asset.kind === 'image' || asset.metadata !== null);
 }
