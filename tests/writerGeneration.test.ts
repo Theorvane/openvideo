@@ -44,6 +44,16 @@ describe('Gemini Writer generation', () => {
     })).resolves.toMatchObject({ title: draft.title });
   });
 
+  it('rejects thought-only Gemini responses without parsing internal reasoning', async () => {
+    const fetchImpl = vi.fn(async () => new Response(JSON.stringify({ candidates: [{
+      content: { parts: [{ text: JSON.stringify(draft), thought: true }] }, finishReason: 'STOP'
+    }] }), { status: 200 }));
+
+    await expect(requestGeminiWriter({
+      apiKey: 'secret-key', modelId: 'gemini-3.1-flash-lite', request: promptsRequest, fetchImpl
+    })).rejects.toThrow('invalid JSON');
+  });
+
   it('uses JSON mode without the deeply nested response schema at video prompts', async () => {
     const fetchImpl = vi.fn(async (_url: string | URL | Request, init?: RequestInit) => {
       const body = JSON.parse(String(init?.body)) as {
